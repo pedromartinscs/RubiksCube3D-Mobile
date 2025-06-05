@@ -1,4 +1,3 @@
-// Refactored CubeManager.cs with dynamic position-based face selection
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
@@ -11,6 +10,8 @@ public class CubeManager : MonoBehaviour
     private GameObject[,,] cubelets = new GameObject[SIZE, SIZE, SIZE];
     private const float cubeletSpacing = 1.05f;
     private const float faceTolerance = 0.01f;
+
+    private bool isRotating = false;
 
     void Start() => CreateCube();
 
@@ -43,6 +44,8 @@ public class CubeManager : MonoBehaviour
 
     public void RotateFace(string faceName, string direction)
     {
+        if (isRotating) return;
+
         Debug.Log($"Rotating {faceName} face to the {direction}");
 
         List<Transform> faceCubelets = GetCubeletsForFace(faceName);
@@ -118,6 +121,8 @@ public class CubeManager : MonoBehaviour
 
     private IEnumerator AnimateRotation(Transform pivot, List<Transform> cubeletsToRotate, Vector3 axis, float angle)
     {
+        isRotating = true;
+
         float duration = 0.3f;
         float timeElapsed = 0f;
         float currentAngle = 0f;
@@ -149,7 +154,9 @@ public class CubeManager : MonoBehaviour
 
         Destroy(pivot.gameObject);
         RebuildCubeletGrid();
-        Debug.Log("✅ Cubelet grid rebuilt. Total filled: " + CountFilledCubelets());
+
+        isRotating = false;
+        Debug.Log("✅ Rotation complete. Grid rebuilt.");
     }
 
     private void RebuildCubeletGrid()
