@@ -2,39 +2,38 @@ using UnityEngine;
 
 public class FaceColorAssigner : MonoBehaviour
 {
-    public Material upMat, downMat, leftMat, rightMat, frontMat, backMat;
+    public Material upMaterial;
+    public Material downMaterial;
+    public Material leftMaterial;
+    public Material rightMaterial;
+    public Material forwardMaterial;
+    public Material backMaterial;
 
-    public void AssignColors(Vector3Int coords)
+    public void ApplyColors()
     {
-        foreach (Transform child in transform)
+        foreach (Transform face in transform)
         {
-            switch (child.name)
-            {
-                case "Face_Up":
-                    child.gameObject.SetActive(coords.y == 2);
-                    if (coords.y == 2) child.GetComponent<Renderer>().material = upMat;
-                    break;
-                case "Face_Down":
-                    child.gameObject.SetActive(coords.y == 0);
-                    if (coords.y == 0) child.GetComponent<Renderer>().material = downMat;
-                    break;
-                case "Face_Left":
-                    child.gameObject.SetActive(coords.x == 0);
-                    if (coords.x == 0) child.GetComponent<Renderer>().material = leftMat;
-                    break;
-                case "Face_Right":
-                    child.gameObject.SetActive(coords.x == 2);
-                    if (coords.x == 2) child.GetComponent<Renderer>().material = rightMat;
-                    break;
-                case "Face_Forward":
-                    child.gameObject.SetActive(coords.z == 2);
-                    if (coords.z == 2) child.GetComponent<Renderer>().material = frontMat;
-                    break;
-                case "Face_Back":
-                    child.gameObject.SetActive(coords.z == 0);
-                    if (coords.z == 0) child.GetComponent<Renderer>().material = backMat;
-                    break;
-            }
+            if (face.name == "Face_Up" && upMaterial != null)
+                ApplyMaterial(face, upMaterial);
+            else if (face.name == "Face_Down" && downMaterial != null)
+                ApplyMaterial(face, downMaterial);
+            else if (face.name == "Face_Left" && leftMaterial != null)
+                ApplyMaterial(face, leftMaterial);
+            else if (face.name == "Face_Right" && rightMaterial != null)
+                ApplyMaterial(face, rightMaterial);
+            else if (face.name == "Face_Forward" && forwardMaterial != null)
+                ApplyMaterial(face, forwardMaterial);
+            else if (face.name == "Face_Back" && backMaterial != null)
+                ApplyMaterial(face, backMaterial);
+        }
+    }
+
+    private void ApplyMaterial(Transform face, Material mat)
+    {
+        var renderer = face.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            renderer.material = mat;
         }
     }
 }

@@ -1,0 +1,63 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+public class FaceSelector : MonoBehaviour
+{
+    public LayerMask faceLayer;
+    public float dragThreshold = 0.1f;
+
+    private Camera mainCam;
+    private GameInput input;
+    private Vector2 startPos;
+    private GameObject selectedCubelet;
+    private string hitFaceName;
+
+    void Awake()
+    {
+		input = new GameInput();
+        mainCam = Camera.main;
+        input.Player.Look.started += ctx => OnPointerDown(ctx);
+        input.Player.Look.canceled += ctx => OnPointerUp(ctx);
+    }
+
+    void OnEnable() => input.Enable();
+    void OnDisable() => input.Disable();
+
+    void OnPointerDown(InputAction.CallbackContext ctx)
+    {
+        Vector2 screenPos = Mouse.current.position.ReadValue();
+        Ray ray = mainCam.ScreenPointToRay(screenPos);
+
+        if (Physics.Raycast(ray, out RaycastHit hit, 100f, faceLayer))
+        {
+            selectedCubelet = hit.collider.transform.root.gameObject;
+            hitFaceName = hit.collider.name; // e.g., Face_Up
+            startPos = screenPos;
+        }
+    }
+
+    void OnPointerUp(InputAction.CallbackContext ctx)
+    {
+        if (selectedCubelet == null) return;
+
+        Vector2 endPos = Mouse.current.position.ReadValue();
+        Vector2 delta = endPos - startPos;
+
+        if (delta.magnitude < dragThreshold)
+        {
+            selectedCubelet = null;
+            return;
+        }
+
+        // Determine swipe direction
+        string swipeDir = Mathf.Abs(delta.x) > Mathf.Abs(delta.y) ? 
+            (delta.x > 0 ? "Right" : "Left") : 
+            (delta.y > 0 ? "Up" : "Down");
+
+        Debug.Log($"Swipe on {hitFaceName} → Direction: {swipeDir}");
+
+        Object.FindFirstObjectByType<CubeManager>().RotateFace(hitFaceName, swipeDir);
+
+        selectedCubelet = null;
+    }
+}
