@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
 public class CubeManager : MonoBehaviour
 {
@@ -46,14 +45,8 @@ public class CubeManager : MonoBehaviour
     {
         if (isRotating) return;
 
-        Debug.Log($"Rotating {faceName} face to the {direction}");
-
         List<Transform> faceCubelets = GetCubeletsForFace(faceName);
-        if (faceCubelets == null || faceCubelets.Count == 0)
-        {
-            Debug.LogWarning("❌ Face cubelets not found.");
-            return;
-        }
+        if (faceCubelets == null || faceCubelets.Count == 0) return;
 
         GameObject pivot = new GameObject("RotationPivot");
         pivot.transform.position = GetFaceCenter(faceCubelets);
@@ -74,7 +67,7 @@ public class CubeManager : MonoBehaviour
         float leftX = -half, rightX = half;
         float frontZ = half, backZ = -half;
 
-        foreach (var cubelet in FindObjectsOfType<Cubelet>())
+        foreach (var cubelet in Object.FindObjectsByType<Cubelet>(FindObjectsSortMode.None))
         {
             Vector3 pos = cubelet.transform.position;
             bool match = faceName switch
@@ -156,33 +149,144 @@ public class CubeManager : MonoBehaviour
         RebuildCubeletGrid();
 
         isRotating = false;
-        Debug.Log("✅ Rotation complete. Grid rebuilt.");
+
+        if (IsCubeSolved())
+        {
+            Debug.Log("🎉 Cube is solved!");
+        }
     }
 
     private void RebuildCubeletGrid()
     {
         cubelets = new GameObject[SIZE, SIZE, SIZE];
-        foreach (var cubelet in FindObjectsOfType<Cubelet>())
+        foreach (var cubelet in Object.FindObjectsByType<Cubelet>(FindObjectsSortMode.None))
         {
             Vector3Int coords = cubelet.Coordinates;
             if (IsValidCoords(coords))
             {
                 cubelets[coords.x, coords.y, coords.z] = cubelet.gameObject;
-                cubelet.GetComponent<FaceColorAssigner>()?.ApplyColors();
             }
         }
     }
 
-    private bool IsValidCoords(Vector3Int c) => c.x >= 0 && c.x < SIZE && c.y >= 0 && c.y < SIZE && c.z >= 0 && c.z < SIZE;
-
-    private int CountFilledCubelets()
+    public bool IsCubeSolved()
     {
-        int count = 0;
-        for (int x = 0; x < SIZE; x++)
-            for (int y = 0; y < SIZE; y++)
-                for (int z = 0; z < SIZE; z++)
-                    if (cubelets[x, y, z] != null)
-                        count++;
-        return count;
+        return IsFaceUniform("Face_Up") &&
+               IsFaceUniform("Face_Down") &&
+               IsFaceUniform("Face_Left") &&
+               IsFaceUniform("Face_Right") &&
+               IsFaceUniform("Face_Forward") &&
+               IsFaceUniform("Face_Back");
     }
+
+    private bool IsFaceUniform(string faceName)
+    {
+        float target = cubeletSpacing;
+        float tolerance = faceTolerance;
+
+        GameObject centerCubelet = null;
+        foreach (var cubelet in Object.FindObjectsByType<Cubelet>(FindObjectsSortMode.None))
+        {
+            Vector3 pos = cubelet.transform.position;
+            bool isCenter = faceName switch
+            {
+                "Face_Up" => Mathf.Abs(pos.y - target) < tolerance && Mathf.Abs(pos.x) < tolerance && Mathf.Abs(pos.z) < tolerance,
+                "Face_Down" => Mathf.Abs(pos.y + target) < tolerance && Mathf.Abs(pos.x) < tolerance && Mathf.Abs(pos.z) < tolerance,
+                "Face_Left" => Mathf.Abs(pos.x + target) < tolerance && Mathf.Abs(pos.y) < tolerance && Mathf.Abs(pos.z) < tolerance,
+                "Face_Right" => Mathf.Abs(pos.x - target) < tolerance && Mathf.Abs(pos.y) < tolerance && Mathf.Abs(pos.z) < tolerance,
+                "Face_Forward" => Mathf.Abs(pos.z - target) < tolerance && Mathf.Abs(pos.x) < tolerance && Mathf.Abs(pos.y) < tolerance,
+                "Face_Back" => Mathf.Abs(pos.z + target) < tolerance && Mathf.Abs(pos.x) < tolerance && Mathf.Abs(pos.y) < tolerance,
+                _ => false
+            };
+            if (isCenter)
+            {
+                centerCubelet = cubelet.gameObject;
+                break;
+            }
+        }
+
+        if (centerCubelet == null)
+            return false;
+
+        Transform centerFace = null;
+        foreach (Transform face in centerCubelet.transform)
+        {
+            Vector3 dir = face.forward;
+            bool match = faceName switch
+            {
+                "Face_Up" => Vector3.Dot(dir, Vector3.up) > 0.9f,
+                "Face_Down" => Vector3.Dot(dir, Vector3.down) > 0.9f,
+                "Face_Left" => Vector3.Dot(dir, Vector3.left) > 0.9f,
+                "Face_Right" => Vector3.Dot(dir, Vector3.right) > 0.9f,
+                "Face_Forward" => Vector3.Dot(dir, Vector3.forward) > 0.9f,
+                "Face_Back" => Vector3.Dot(dir, Vector3.back) > 0.9f,
+                _ => false
+            };
+
+            if (match)
+            {
+                centerFace = face;
+                break;
+            }
+        }
+
+        if (centerFace == null)
+            return false;
+
+        var centerRenderer = centerFace.GetComponent<MeshRenderer>();
+        if (centerRenderer == null)
+            return false;
+
+        string referenceMat = centerRenderer.sharedMaterial.name;
+
+        foreach (var cubelet in Object.FindObjectsByType<Cubelet>(FindObjectsSortMode.None))
+        {
+            Vector3 pos = cubelet.transform.position;
+            bool isOnFace = faceName switch
+            {
+                "Face_Up" => Mathf.Abs(pos.y - target) < tolerance,
+                "Face_Down" => Mathf.Abs(pos.y + target) < tolerance,
+                "Face_Left" => Mathf.Abs(pos.x + target) < tolerance,
+                "Face_Right" => Mathf.Abs(pos.x - target) < tolerance,
+                "Face_Forward" => Mathf.Abs(pos.z - target) < tolerance,
+                "Face_Back" => Mathf.Abs(pos.z + target) < tolerance,
+                _ => false
+            };
+
+            if (!isOnFace) continue;
+
+            Transform visibleFace = null;
+            foreach (Transform face in cubelet.transform)
+            {
+                Vector3 dir = face.forward;
+                bool match = faceName switch
+                {
+                    "Face_Up" => Vector3.Dot(dir, Vector3.up) > 0.9f,
+                    "Face_Down" => Vector3.Dot(dir, Vector3.down) > 0.9f,
+                    "Face_Left" => Vector3.Dot(dir, Vector3.left) > 0.9f,
+                    "Face_Right" => Vector3.Dot(dir, Vector3.right) > 0.9f,
+                    "Face_Forward" => Vector3.Dot(dir, Vector3.forward) > 0.9f,
+                    "Face_Back" => Vector3.Dot(dir, Vector3.back) > 0.9f,
+                    _ => false
+                };
+
+                if (match)
+                {
+                    visibleFace = face;
+                    break;
+                }
+            }
+
+            if (visibleFace == null)
+                return false;
+
+            var renderer = visibleFace.GetComponent<MeshRenderer>();
+            if (renderer == null || renderer.sharedMaterial.name != referenceMat)
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool IsValidCoords(Vector3Int c) => c.x >= 0 && c.x < SIZE && c.y >= 0 && c.y < SIZE && c.z >= 0 && c.z < SIZE;
 }
