@@ -1,66 +1,70 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
+using System.Linq;
 
 public class CubeStateExtractor : MonoBehaviour
 {
     public CubeManager cubeManager;
 
     public string GetCubeStateString()
-    {
-        Dictionary<string, char> faceLetterMap = new()
-        {
-            { "Face_Up", 'U' },
-            { "Face_Right", 'R' },
-            { "Face_Forward", 'F' },
-            { "Face_Down", 'D' },
-            { "Face_Left", 'L' },
-            { "Face_Back", 'B' },
-        };
-
-        string[] faceNames = { "Face_Up", "Face_Right", "Face_Forward", "Face_Down", "Face_Left", "Face_Back" };
-        string result = "";
-
-        foreach (string faceName in faceNames)
-        {
-            List<(Vector2, char)> facelets = new();
-
-            foreach (Transform cubelet in cubeManager.GetCubeletsForFace(faceName))
-            {
-                Transform face = GetMatchingFace(cubelet, faceName);
-                if (face == null) continue;
-
-                Renderer renderer = face.GetComponent<Renderer>();
-                if (renderer == null || renderer.sharedMaterial == null) continue;
-
-                string colorName = renderer.sharedMaterial.name.Replace(" (Instance)", "");
-                char colorChar = ColorNameToChar(colorName, faceLetterMap[faceName]);
-
-                // Project facelet into 2D for consistent sorting
-                Vector3 pos = face.localPosition;
-                Vector2 flat = faceName switch
-                {
-                    "Face_Up" or "Face_Down" => new Vector2(pos.x, -pos.z),
-                    "Face_Left" or "Face_Right" => new Vector2(pos.z, -pos.y),
-                    "Face_Forward" or "Face_Back" => new Vector2(pos.x, -pos.y),
-                    _ => Vector2.zero
-                };
-
-                facelets.Add((flat, colorChar));
-            }
-
-            // Sort in row-major (top-left to bottom-right)
-            facelets.Sort((a, b) =>
-            {
-                int rowComp = a.Item1.y.CompareTo(b.Item1.y);
-                return rowComp != 0 ? rowComp : a.Item1.x.CompareTo(b.Item1.x);
-            });
-
-            foreach (var (_, ch) in facelets)
-                result += ch;
-        }
-
-        return result;
-    }
+	{
+		string result = "";
+		float tolerance = 0.1f; // Allow for minor floating-point imprecision
+	
+		var faceInfo = new List<(string name, Vector3 normal, Func<Vector3, bool> isOnFace)>
+		{
+			("Face_Up", Vector3.up, pos => Mathf.Abs(pos.y - 1.05f) < tolerance),
+			("Face_Left", Vector3.left, pos => Mathf.Abs(pos.x + 1.05f) < tolerance),
+			("Face_Forward", Vector3.forward, pos => Mathf.Abs(pos.z - 1.05f) < tolerance),
+			("Face_Right", Vector3.right, pos => Mathf.Abs(pos.x - 1.05f) < tolerance),
+			("Face_Back", Vector3.back, pos => Mathf.Abs(pos.z + 1.05f) < tolerance),
+			("Face_Down", Vector3.down, pos => Mathf.Abs(pos.y + 1.05f) < tolerance),
+		};
+	
+		foreach (var (faceName, normal, isOnFace) in faceInfo)
+		{
+			List<(Transform facelet, Vector3 pos)> selected = new();
+	
+			foreach (Transform cubelet in cubeManager.GetAllCubelets())
+			{
+				if (!isOnFace(cubelet.position)) continue;
+	
+				foreach (Transform child in cubelet)
+				{
+					if (!child.name.StartsWith("Face_")) continue;
+	
+					float alignment = Vector3.Dot(child.forward.normalized, normal.normalized);
+					if (alignment > 0.99f)
+					{
+						selected.Add((child, cubelet.position));
+						break; // only one facelet per cubelet
+					}
+				}
+			}
+	
+			if (selected.Count != 9)
+			{
+				Debug.LogError($"❌ Face {faceName} has {selected.Count} valid facelets instead of 9.");
+				return "";
+			}
+	
+			selected = selected
+				.OrderBy(f => -f.pos.y)  // top to bottom
+				.ThenBy(f => f.pos.x)    // left to right
+				.ToList();
+	
+			foreach (var (facelet, _) in selected)
+			{
+				var mat = facelet.GetComponent<Renderer>().sharedMaterial;
+				string colorName = mat.name.Replace(" (Instance)", "");
+				result += ColorNameToChar(colorName, '?');
+			}
+		}
+	
+		Debug.Log("🧩 Final CubeState: " + result);
+		return result;
+	}
 
     private Transform GetMatchingFace(Transform cubelet, string faceName)
     {
@@ -72,17 +76,17 @@ public class CubeStateExtractor : MonoBehaviour
         return null;
     }
 
-    private char ColorNameToChar(string colorName, char fallback)
-    {
-        return colorName switch
-        {
-            "White" => 'U',
-            "Yellow" => 'D',
-            "Green" => 'F',
-            "Blue" => 'B',
-            "Red" => 'R',
-            "Orange" => 'L',
-            _ => fallback
-        };
-    }
+    private char ColorNameToChar(string name, char fallback = '?')
+	{
+		return name.ToLower() switch
+		{
+			"mat_white" => 'U',
+			"mat_yellow" => 'D',
+			"mat_red" => 'R',
+			"mat_orange" => 'L',
+			"mat_blue" => 'F',
+			"mat_green" => 'B',
+			_ => fallback
+		};
+	}
 }

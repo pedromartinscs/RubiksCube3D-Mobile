@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 
 public class CubeManager : MonoBehaviour
 {
@@ -318,6 +319,36 @@ public class CubeManager : MonoBehaviour
 		Move lastMove = moveHistory.Pop();
 		string opposite = GetOppositeDirection(lastMove.direction);
 		RotateFace(lastMove.faceName, opposite, false); // false = don't re-add to stack
+	}
+	
+	public List<Transform> GetAllCubelets()
+	{
+		Cubelet[] cubelets = Object.FindObjectsByType<Cubelet>(FindObjectsSortMode.None);
+		return cubelets.Select(c => c.transform).ToList();
+	}
+	
+	public List<Transform> GetCubeletsFacing(Vector3 direction, float tolerance = 0.9f)
+	{
+		List<Transform> matching = new();
+	
+		foreach (Transform cubelet in GetAllCubelets())
+		{
+			foreach (Transform face in cubelet)
+			{
+				if (!face.name.StartsWith("Face_")) continue;
+	
+				Vector3 worldNormal = face.transform.forward;
+				float alignment = Vector3.Dot(worldNormal.normalized, direction.normalized);
+	
+				if (alignment >= tolerance)
+				{
+					matching.Add(cubelet);
+					break; // only need one face to qualify
+				}
+			}
+		}
+	
+		return matching;
 	}
 	
 	private string GetOppositeDirection(string direction)
