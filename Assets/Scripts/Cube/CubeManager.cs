@@ -9,10 +9,23 @@ public class CubeManager : MonoBehaviour
     private GameObject[,,] cubelets = new GameObject[SIZE, SIZE, SIZE];
     private const float cubeletSpacing = 1.05f;
     private const float faceTolerance = 0.01f;
+	private Stack<Move> moveHistory = new Stack<Move>();
 
     private bool isRotating = false;
 
     void Start() => CreateCube();
+
+	private struct Move
+	{
+		public string faceName;
+		public string direction;
+	
+		public Move(string faceName, string direction)
+		{
+			this.faceName = faceName;
+			this.direction = direction;
+		}
+	}
 
     void CreateCube()
     {
@@ -41,7 +54,7 @@ public class CubeManager : MonoBehaviour
         }
     }
 
-    public void RotateFace(string faceName, string direction)
+    public void RotateFace(string faceName, string direction, bool recordMove = true)
     {
         if (isRotating) return;
 
@@ -56,9 +69,14 @@ public class CubeManager : MonoBehaviour
         float angle = 90f;
 
         StartCoroutine(AnimateRotation(pivot.transform, faceCubelets, rotationAxis, angle));
+		
+		if (recordMove)
+		{
+			moveHistory.Push(new Move(faceName, direction));
+		}
     }
 
-    private List<Transform> GetCubeletsForFace(string faceName)
+    public List<Transform> GetCubeletsForFace(string faceName)
     {
         List<Transform> faceCubelets = new List<Transform>();
 
@@ -289,4 +307,28 @@ public class CubeManager : MonoBehaviour
     }
 
     private bool IsValidCoords(Vector3Int c) => c.x >= 0 && c.x < SIZE && c.y >= 0 && c.y < SIZE && c.z >= 0 && c.z < SIZE;
+	
+	public bool HasUndo() => moveHistory.Count > 0;
+	
+	public void UndoLastMove()
+	{
+		if (isRotating || moveHistory.Count == 0)
+			return;
+		
+		Move lastMove = moveHistory.Pop();
+		string opposite = GetOppositeDirection(lastMove.direction);
+		RotateFace(lastMove.faceName, opposite, false); // false = don't re-add to stack
+	}
+	
+	private string GetOppositeDirection(string direction)
+	{
+		return direction switch
+		{
+			"Left" => "Right",
+			"Right" => "Left",
+			"Up" => "Down",
+			"Down" => "Up",
+			_ => direction
+		};
+	}
 }
