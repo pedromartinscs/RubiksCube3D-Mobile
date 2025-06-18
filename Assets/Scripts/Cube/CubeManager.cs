@@ -11,17 +11,24 @@ public class CubeManager : MonoBehaviour
     private const float cubeletSpacing = 1.05f;
     private const float faceTolerance = 0.01f;
 	private Stack<Move> moveHistory = new Stack<Move>();
+	private char[] logicalCube = new char[54];
 
     private bool isRotating = false;
 
     void Start() => CreateCube();
+	
+	void Awake()
+	{
+		var asset = Resources.Load<TextAsset>("TwistSlicePruneTable");
+		Kociemba.TwistSlicePrune.LoadFromTextAsset(asset);
+	}
 
 	private struct Move
 	{
 		public string faceName;
-		public string direction;
+		public bool direction;
 	
-		public Move(string faceName, string direction)
+		public Move(string faceName, bool direction)
 		{
 			this.faceName = faceName;
 			this.direction = direction;
@@ -53,9 +60,102 @@ public class CubeManager : MonoBehaviour
                 }
             }
         }
+		
+		string initial = "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB";
+        logicalCube = initial.ToCharArray();
     }
+	
+	public void RotateLogicalCubeFace(string face, bool clockwise)
+    {
+        switch (face)
+        {
+            case "Face_Up": RotateU(clockwise); break;
+            case "Face_Down": RotateD(clockwise); break;
+            case "Face_Right": RotateL(clockwise); break;    //Right and Left faces are switched the in the detection, so for the logical cube I corrected it
+            case "Face_Left": RotateR(clockwise); break;     //Right and Left faces are switched the in the detection, so for the logical cube I corrected it
+            case "Face_Forward": RotateF(clockwise); break;
+            case "Face_Back": RotateB(clockwise); break;
+        }
+    }
+	
+	private void RotateU(bool cw) => RotateFacelet(new int[] {
+		0, 1, 2, 3, 4, 5, 6, 7, 8,  // U face
+		36, 37, 38,  // L
+		45, 46, 47,  // B
+		9, 10, 11,  // R
+		18, 19, 20   // F
+	}, cw);
 
-    public void RotateFace(string faceName, string direction, bool recordMove = true)
+    private void RotateD(bool cw) => RotateFacelet(new int[] {
+		27, 28, 29, 30, 31, 32, 33, 34, 35,
+		24, 25, 26, // F bottom row
+		15, 16, 17, // R bottom row
+		51, 52, 53, // B bottom row
+		42, 43, 44  // L bottom row
+	}, cw);
+
+    private void RotateF(bool cw) => RotateFacelet(new int[] {
+		18, 19, 20, 21, 22, 23, 24, 25, 26,
+		44, 41, 38, // L right column
+		29, 28, 27, // D top row
+		9, 12, 15,  // R left column
+		6, 7, 8    // U bottom row
+	}, cw);
+
+    private void RotateB(bool cw) => RotateFacelet(new int[] {
+        45, 46, 47, 48, 49, 50, 51, 52, 53,
+        2, 1, 0,    // U top row
+        36, 39, 42,// L left column
+        33, 34, 35,// D bottom row
+        17, 14, 11 // R right column
+    }, cw);
+
+    private void RotateL(bool cw) => RotateFacelet(new int[] {
+		36, 37, 38, 39, 40, 41, 42, 43, 44,
+		0, 3, 6,    // U left column (top to bottom)
+		18, 21, 24,// F left column (top to bottom)
+		27, 30, 33,// D left column (top to bottom)
+		53, 50, 47 // B right column (bottom to top)
+	}, cw);
+
+    private void RotateR(bool cw) => RotateFacelet(new int[] {
+        9,10,11,12,13,14,15,16,17,
+        2,5,8,38,41,44,29,32,35,36,39,42
+    }, cw);
+	
+	private void RotateFacelet(int[] indices, bool clockwise)
+	{
+		char[] copy = (char[])logicalCube.Clone();
+	
+		// Rotate face itself (standard 3x3 rotation)
+		int[] face = indices[..9];
+		for (int i = 0; i < 9; i++)
+		{
+			int fromIndex = !clockwise
+				? face[(6 - 3 * (i % 3) + i / 3)]
+				: face[(3 * (i % 3) + 2 - i / 3)];
+	
+			logicalCube[face[i]] = copy[fromIndex];
+		}
+		
+		//Get groups of adjacent facelets (4 groups of 3)
+		int[] firstFace = indices[9..12];
+		int[] secondFace = indices[12..15];
+		int[] thirdFace = indices[15..18];
+		int[] fourthFace = indices[18..21];
+	
+		for (int i = 0; i < 3; i++)
+		{
+			logicalCube[firstFace[i]] = !clockwise ? copy[secondFace[i]] : copy[fourthFace[i]];
+			logicalCube[secondFace[i]] = !clockwise ? copy[thirdFace[i]] : copy[firstFace[i]];
+			logicalCube[thirdFace[i]] = !clockwise ? copy[fourthFace[i]] : copy[secondFace[i]];
+			logicalCube[fourthFace[i]] = !clockwise ? copy[firstFace[i]] : copy[thirdFace[i]];
+		}
+	
+		//Debug.Log("✅ New logical state: " + new string(logicalCube));
+	}
+
+    public void RotateFace(string faceName, bool direction, bool recordMove = true)
     {
         if (isRotating) return;
 
@@ -69,13 +169,46 @@ public class CubeManager : MonoBehaviour
         Vector3 rotationAxis = GetRotationAxis(faceName, direction);
         float angle = 90f;
 
-        StartCoroutine(AnimateRotation(pivot.transform, faceCubelets, rotationAxis, angle));
+        StartCoroutine(AnimateRotation(pivot.transform, faceCubelets, rotationAxis, angle, faceName, direction));
 		
 		if (recordMove)
 		{
 			moveHistory.Push(new Move(faceName, direction));
 		}
     }
+	
+	private bool IsClockwiseRotation(string faceName, string direction)
+	{
+		return (faceName, direction) switch
+		{
+			// Horizontal rotation of top and bottom face:
+			// Clockwise for U is visually Left → true
+			("Face_Up", "Left") => true,
+			("Face_Up", "Right") => false,
+	
+			// Clockwise for D is visually Right → true
+			("Face_Down", "Right") => true,
+			("Face_Down", "Left") => false,
+	
+			// Left face: clockwise is visually Down
+			("Face_Left", "Down") => true,
+			("Face_Left", "Up") => false,
+	
+			// Right face: clockwise is visually Up
+			("Face_Right", "Up") => true,
+			("Face_Right", "Down") => false,
+	
+			// Front face: clockwise is visually Right
+			("Face_Forward", "Right") => true,
+			("Face_Forward", "Left") => false,
+	
+			// Back face: clockwise is visually Left (inverted view)
+			("Face_Back", "Left") => true,
+			("Face_Back", "Right") => false,
+	
+			_ => true // default fallback
+		};
+	}
 
     public List<Transform> GetCubeletsForFace(string faceName)
     {
@@ -107,7 +240,7 @@ public class CubeManager : MonoBehaviour
         return faceCubelets;
     }
 
-    private Vector3 GetRotationAxis(string faceName, string direction)
+    private Vector3 GetRotationAxis(string faceName, bool direction)
     {
         Vector3 axis = faceName switch
         {
@@ -120,8 +253,7 @@ public class CubeManager : MonoBehaviour
             _ => Vector3.zero
         };
 
-        bool reverse = direction == "Right" || direction == "Down";
-        return reverse ? -axis : axis;
+        return direction ? axis : -axis;
     }
 
     private Vector3 GetFaceCenter(List<Transform> faceCubelets)
@@ -131,7 +263,7 @@ public class CubeManager : MonoBehaviour
         return sum / faceCubelets.Count;
     }
 
-    private IEnumerator AnimateRotation(Transform pivot, List<Transform> cubeletsToRotate, Vector3 axis, float angle)
+    private IEnumerator AnimateRotation(Transform pivot, List<Transform> cubeletsToRotate, Vector3 axis, float angle, string faceName, bool direction)
     {
         isRotating = true;
 
@@ -166,12 +298,20 @@ public class CubeManager : MonoBehaviour
 
         Destroy(pivot.gameObject);
         RebuildCubeletGrid();
+		
+		RotateLogicalCubeFace(faceName, direction);
+		
+		Debug.Log(new string(logicalCube));
 
         isRotating = false;
 
         if (IsCubeSolved())
         {
             Debug.Log("🎉 Cube is solved!");
+			string cube = new string(logicalCube);
+			if (cube != "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"){
+				Debug.Log("But the string is different...");
+			}
         }
     }
 
@@ -317,7 +457,7 @@ public class CubeManager : MonoBehaviour
 			return;
 		
 		Move lastMove = moveHistory.Pop();
-		string opposite = GetOppositeDirection(lastMove.direction);
+		bool opposite = !lastMove.direction;
 		RotateFace(lastMove.faceName, opposite, false); // false = don't re-add to stack
 	}
 	
@@ -349,17 +489,5 @@ public class CubeManager : MonoBehaviour
 		}
 	
 		return matching;
-	}
-	
-	private string GetOppositeDirection(string direction)
-	{
-		return direction switch
-		{
-			"Left" => "Right",
-			"Right" => "Left",
-			"Up" => "Down",
-			"Down" => "Up",
-			_ => direction
-		};
 	}
 }

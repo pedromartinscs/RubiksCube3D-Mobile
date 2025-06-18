@@ -20,7 +20,7 @@ public class CubeSolver : MonoBehaviour
             return;
         }
 		Debug.Log("🧩 CubeState: " + state);
-        string solution = KociembaSolver.Solve(state, maxDepth: 21, timeOut: 5, useSeparator: false);
+        string solution = KociembaSolver.Solve(state, maxDepth: 21, timeOut: 20, useSeparator: false);
         if (solution == null)
 		{
 			Debug.LogError("❌ Solver returned no solution.");
@@ -34,13 +34,13 @@ public class CubeSolver : MonoBehaviour
 		}
 
         Debug.Log("✅ Solver Output: " + solution);
-        List<(string face, string direction)> parsedMoves = ParseSolution(solution);
+        List<(string face, bool direction)> parsedMoves = ParseSolution(solution);
         StartCoroutine(ExecuteMoves(parsedMoves));
     }
 
-    private List<(string, string)> ParseSolution(string moves)
+    private List<(string, bool)> ParseSolution(string moves)
     {
-        var list = new List<(string, string)>();
+        var list = new List<(string, bool)>();
         string[] parts = moves.Trim().Split(' ');
 
         foreach (string move in parts)
@@ -58,14 +58,14 @@ public class CubeSolver : MonoBehaviour
 
             if (face == null) continue;
 
-            string direction = "Right"; // Default is clockwise
+            bool direction = true; // Default is clockwise
             if (move.Length > 1)
             {
-                if (move[1] == '\'') direction = "Left";
+                if (move[1] == '\'') direction = false;
                 else if (move[1] == '2')
                 {
-                    list.Add((face, "Right"));
-                    list.Add((face, "Right"));
+                    list.Add((face, true));
+                    list.Add((face, true));
                     continue;
                 }
             }
@@ -76,7 +76,7 @@ public class CubeSolver : MonoBehaviour
         return list;
     }
 
-    private IEnumerator ExecuteMoves(List<(string face, string direction)> moves)
+    private IEnumerator ExecuteMoves(List<(string face, bool direction)> moves)
     {
         foreach (var move in moves)
         {

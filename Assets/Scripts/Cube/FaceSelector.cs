@@ -50,14 +50,34 @@ public class FaceSelector : MonoBehaviour
         }
 
         // Determine swipe direction
-        string swipeDir = Mathf.Abs(delta.x) > Mathf.Abs(delta.y) ? 
-            (delta.x > 0 ? "Right" : "Left") : 
-            (delta.y > 0 ? "Up" : "Down");
-
-        Debug.Log($"Swipe on {hitFaceName} → Direction: {swipeDir}");
+        bool swipeDir = GetSwipeClockwise(hitFaceName, delta);
 
         Object.FindFirstObjectByType<CubeManager>().RotateFace(hitFaceName, swipeDir);
 
         selectedCubelet = null;
     }
+	
+	bool GetSwipeClockwise(string faceName, Vector2 delta)
+	{
+		if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y)) // Horizontal swipe
+		{
+			return faceName switch
+			{
+				"Face_Up"      => delta.x > 0,  // Right swipe = clockwise
+				"Face_Down"    => delta.x < 0,  // Left swipe = clockwise (flipped)
+				"Face_Forward" => delta.x < 0,  // Left swipe = clockwise
+				"Face_Back"    => delta.x > 0,  // Right swipe = clockwise
+				_              => true
+			};
+		}
+		else // Vertical swipe
+		{
+			return faceName switch
+			{
+				"Face_Left"    => delta.y < 0,  // Down swipe = clockwise
+				"Face_Right"   => delta.y > 0,  // Up swipe = clockwise
+				_              => true
+			};
+		}
+	}
 }

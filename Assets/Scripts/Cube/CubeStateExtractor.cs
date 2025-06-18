@@ -10,19 +10,40 @@ public class CubeStateExtractor : MonoBehaviour
     public string GetCubeStateString()
 	{
 		string result = "";
-		float tolerance = 0.1f; // Allow for minor floating-point imprecision
-	
-		var faceInfo = new List<(string name, Vector3 normal, Func<Vector3, bool> isOnFace)>
+		float tolerance = 0.1f;
+		
+		Dictionary<char, char> faceRemap = new()
 		{
-			("Face_Up", Vector3.up, pos => Mathf.Abs(pos.y - 1.05f) < tolerance),
-			("Face_Left", Vector3.left, pos => Mathf.Abs(pos.x + 1.05f) < tolerance),
-			("Face_Forward", Vector3.forward, pos => Mathf.Abs(pos.z - 1.05f) < tolerance),
-			("Face_Right", Vector3.right, pos => Mathf.Abs(pos.x - 1.05f) < tolerance),
-			("Face_Back", Vector3.back, pos => Mathf.Abs(pos.z + 1.05f) < tolerance),
-			("Face_Down", Vector3.down, pos => Mathf.Abs(pos.y + 1.05f) < tolerance),
+			['F'] = 'F',
+			['B'] = 'B',
+			['L'] = 'R',
+			['R'] = 'L',
+			['U'] = 'U',
+			['D'] = 'D',
 		};
 	
-		foreach (var (faceName, normal, isOnFace) in faceInfo)
+		var faces = new List<(string faceCode, Func<Vector3, bool>, Vector3, Func<Vector3, IComparable>, Func<Vector3, IComparable>)>
+		{
+			// U = actual bottom
+			("U", pos => Mathf.Abs(pos.y + 1.05f) < tolerance, Vector3.down,    pos => -pos.z, pos => pos.x),
+			
+			// L = actual right
+			("L", pos => Mathf.Abs(pos.x - 1.05f) < tolerance, Vector3.right,   pos => -pos.y, pos => -pos.z),
+		
+			// F = actual back
+			("F", pos => Mathf.Abs(pos.z + 1.05f) < tolerance, Vector3.back,    pos => -pos.y, pos => -pos.x),
+		
+			// D = actual top
+			("D", pos => Mathf.Abs(pos.y - 1.05f) < tolerance, Vector3.up,      pos => pos.z, pos => pos.x),
+			
+			// R = actual left
+			("R", pos => Mathf.Abs(pos.x + 1.05f) < tolerance, Vector3.left,    pos => -pos.y, pos => pos.z),
+		
+			// B = actual front
+			("B", pos => Mathf.Abs(pos.z - 1.05f) < tolerance, Vector3.forward, pos => -pos.y, pos => pos.x),
+		};
+	
+		foreach (var (faceCode, isOnFace, normal, primarySort, secondarySort) in faces)
 		{
 			List<(Transform facelet, Vector3 pos)> selected = new();
 	
@@ -30,40 +51,49 @@ public class CubeStateExtractor : MonoBehaviour
 			{
 				if (!isOnFace(cubelet.position)) continue;
 	
-				foreach (Transform child in cubelet)
+				Transform matchedFace = null;
+				foreach (Transform face in cubelet)
 				{
-					if (!child.name.StartsWith("Face_")) continue;
-	
-					float alignment = Vector3.Dot(child.forward.normalized, normal.normalized);
-					if (alignment > 0.99f)
+					if (!face.name.StartsWith("Face_")) continue;
+					if (Vector3.Dot(face.forward.normalized, normal.normalized) > 0.9f)
 					{
-						selected.Add((child, cubelet.position));
-						break; // only one facelet per cubelet
+						matchedFace = face;
+						break;
 					}
 				}
+	
+				if (matchedFace != null)
+					selected.Add((matchedFace, cubelet.position));
 			}
 	
 			if (selected.Count != 9)
 			{
-				Debug.LogError($"❌ Face {faceName} has {selected.Count} valid facelets instead of 9.");
+				Debug.LogError($"❌ {faceCode}-face has {selected.Count} facelets instead of 9.");
 				return "";
 			}
 	
 			selected = selected
-				.OrderBy(f => -f.pos.y)  // top to bottom
-				.ThenBy(f => f.pos.x)    // left to right
+				.OrderBy(f => primarySort(f.pos))
+				.ThenBy(f => secondarySort(f.pos))
 				.ToList();
 	
 			foreach (var (facelet, _) in selected)
 			{
 				var mat = facelet.GetComponent<Renderer>().sharedMaterial;
 				string colorName = mat.name.Replace(" (Instance)", "");
-				result += ColorNameToChar(colorName, '?');
+				char c = ColorNameToChar(colorName, '?');
+				result += c;
 			}
 		}
 	
+		string corrected = new string(result.Select(c => faceRemap[c]).ToArray());
+		
 		Debug.Log("🧩 Final CubeState: " + result);
-		return result;
+		var counts = result.GroupBy(c => c).ToDictionary(g => g.Key, g => g.Count());
+		foreach (var kv in counts)
+			Debug.Log($"🔢 {kv.Key}: {kv.Value}");
+	
+		return corrected;
 	}
 
     private Transform GetMatchingFace(Transform cubelet, string faceName)
@@ -84,8 +114,8 @@ public class CubeStateExtractor : MonoBehaviour
 			"mat_yellow" => 'D',
 			"mat_red" => 'R',
 			"mat_orange" => 'L',
-			"mat_blue" => 'F',
-			"mat_green" => 'B',
+			"mat_blue" => 'B',
+			"mat_green" => 'F',
 			_ => fallback
 		};
 	}

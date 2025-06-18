@@ -23,12 +23,12 @@ public class CubeScrambler : MonoBehaviour
         isScrambling = true;
 
         string[] faceNames = { "Face_Up", "Face_Down", "Face_Left", "Face_Right", "Face_Forward", "Face_Back" };
-        string[] directions = { "Left", "Right", "Up", "Down" }; // These must match your CubeManager logic
+        bool[] directions = {true, false}; // These must match your CubeManager logic
 
         for (int i = 0; i < scrambleMoves; i++)
         {
             string face = faceNames[Random.Range(0, faceNames.Length)];
-            string dir = directions[Random.Range(0, directions.Length)];
+            bool dir = directions[Random.Range(0, directions.Length)];
 
             cubeManager.RotateFace(face, dir);
 

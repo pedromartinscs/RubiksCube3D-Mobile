@@ -1,157 +1,142 @@
-// Search.cs
-// Core of the Kociemba 2-phase Rubik's Cube solving algorithm (Phase 1 + Phase 2)
-
 using System;
-using System.Collections.Generic;
+using UnityEngine;
 
 namespace Kociemba
 {
     public static class Search
     {
-        private static readonly string[] moveNames =
-        {
+        private static readonly string[] MoveStr = {
             "U", "U2", "U'", "R", "R2", "R'", "F", "F2", "F'",
             "D", "D2", "D'", "L", "L2", "L'", "B", "B2", "B'"
         };
 
+        private static long startTime;
+        private const int timeoutMilliseconds = 8000;
+
+        private static string solutionString;
+        private static bool _isSolved;
+		public static bool isSolved => _isSolved;
+
+        private static CubieCube[] moveBuffer = new CubieCube[30];
+        private static int[] moveHistory = new int[30];
+
         public static string solution(string facelets, int maxDepth, int timeOut, bool useSeparator)
         {
-            if (facelets.Length != 54)
-                throw new ArgumentException("Facelet string must be exactly 54 characters");
+            _isSolved = false;
+            solutionString = null;
 
-            var faceCube = new FaceCube(facelets);
-            CubieCube cube = faceCube.ToCubieCube();
+            FaceCube fc = new FaceCube(facelets);
+            CubieCube cc = fc.ToCubieCube();
 
-            if (cube.IsSolved())
-                return "";
-
-            for (int depth = 1; depth <= maxDepth; depth++)
+            if (!cc.IsValid())
             {
-                var result = SearchPhase1(cube, depth, new List<string>(), -1);
-                if (result != null)
+                Debug.LogError("❌ Invalid cube state");
+                return null;
+            }
+
+            int twist = cc.getTwist();
+            int flip = cc.getFlip();
+            int slice = cc.GetUDSliceIndex();
+
+            int prune = TwistSlicePrune.GetPrune(twist, slice);
+
+            if (prune == 0)
+            {
+                return "";
+            }
+
+            startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            moveBuffer[0] = new CubieCube();
+			cc.CopyTo(moveBuffer[0]);
+            try
+            {
+                for (int depth = prune; depth <= maxDepth; depth++)
                 {
-                    // Phase 2: solve from G1 to full solution
-                    CubieCube g1Cube = ApplyMoves(cube, result);
-                    var phase2 = SearchPhase2(g1Cube, maxDepth - result.Count);
-                    if (phase2 != null)
+                    Debug.Log($"🔍 Trying solution at depth {depth}...");
+
+                    if (search(0, depth, twist, flip, slice, -1))
                     {
-                        result.AddRange(phase2);
-                        return string.Join(" ", result);
+                        return solutionString;
+                    }
+
+                    if (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startTime > timeoutMilliseconds)
+                    {
+                        Debug.LogError("❌ Solver timed out.");
+                        return null;
                     }
                 }
             }
-
-            return null;
-        }
-
-        private static List<string> SearchPhase1(CubieCube cube, int depthLeft, List<string> path, int lastFace)
-        {
-            if (cube.IsInG1())
-                return new List<string>(path);
-
-            int heuristic = Pruning.GetCombinedPrune(cube);
-            if (heuristic > depthLeft)
+            catch (Exception e)
+            {
+                Debug.LogError("❌ Solver failed: " + e.Message);
                 return null;
+            }
 
-            if (depthLeft == 0)
-                return null;
+            Debug.LogError("❌ No solution found.");
+            return null;
+        }
 
-            for (int move = 0; move < 6; move++)
+        private static bool search(int depth, int maxDepth, int twist, int flip, int slice, int lastMove)
+        {
+            if (depth == maxDepth)
             {
-                if (move == lastFace) continue;
-
-                for (int power = 1; power <= 3; power++)
+                if (twist == 0 && flip == 0 && slice == 0)
                 {
-                    CubieCube nextCube = new CubieCube();
-                    Array.Copy(cube.cp, nextCube.cp, 8);
-                    Array.Copy(cube.co, nextCube.co, 8);
-                    Array.Copy(cube.ep, nextCube.ep, 12);
-                    Array.Copy(cube.eo, nextCube.eo, 12);
-
-                    for (int i = 0; i < power; i++)
-                        nextCube.ApplyMove(move);
-
-                    var moveStr = moveNames[move * 3 + (power - 1)];
-                    path.Add(moveStr);
-
-                    var result = SearchPhase1(nextCube, depthLeft - 1, path, move);
-                    if (result != null)
-                        return result;
-
-                    path.RemoveAt(path.Count - 1);
+                    _isSolved = true;
+                    solutionString = stringifyMoves(depth);
+                    return true;
                 }
+                return false;
             }
 
-            return null;
+            if (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startTime > timeoutMilliseconds)
+                return false;
+
+            for (int move = 0; move < 18; move++)
+            {
+                int axis = move / 3;
+
+                if (axis == lastMove)
+                    continue;
+
+                moveBuffer[depth + 1] = new CubieCube();
+				
+				if (moveBuffer[depth] == null)
+				{
+					Debug.LogError($"❌ moveBuffer[{depth}] is null!");
+					return false;
+				}
+				
+                CubieCube.cornerMultiply(moveBuffer[depth], CubieCube.MoveCube[move], moveBuffer[depth + 1]);
+				CubieCube.edgeMultiply(moveBuffer[depth], CubieCube.MoveCube[move], moveBuffer[depth + 1]);
+
+                int nextTwist = moveBuffer[depth + 1].getTwist();
+                int nextFlip = moveBuffer[depth + 1].getFlip();
+                int nextSlice = moveBuffer[depth + 1].GetUDSliceIndex();
+
+                int prune = TwistSlicePrune.GetPrune(nextTwist, nextSlice);
+
+                if (depth + prune > maxDepth)
+                    continue;
+
+                moveHistory[depth] = move;
+
+                if (search(depth + 1, maxDepth, nextTwist, nextFlip, nextSlice, axis))
+                    return true;
+            }
+
+            return false;
         }
 
-        private static List<string> SearchPhase2(CubieCube cube, int maxDepth)
+        private static string stringifyMoves(int depth)
         {
-            // Very simplified Phase 2: brute-force up to 6 moves
-            List<string> path = new List<string>();
-            for (int depth = 0; depth <= maxDepth; depth++)
+            string result = "";
+            for (int i = 0; i < depth; i++)
             {
-                var result = Phase2Search(cube, depth, path, -1);
-                if (result != null) return result;
+                result += MoveStr[moveHistory[i]] + " ";
             }
-            return null;
-        }
-
-        private static List<string> Phase2Search(CubieCube cube, int depthLeft, List<string> path, int lastFace)
-        {
-            if (depthLeft == 0)
-                return cube.IsSolved() ? new List<string>(path) : null;
-
-            for (int move = 0; move < 6; move++)
-            {
-                if (move == lastFace) continue;
-                if (move == 2 || move == 4) continue; // Skip F and B in Phase 2 for simplicity
-
-                for (int power = 1; power <= 3; power++)
-                {
-                    CubieCube nextCube = new CubieCube();
-                    Array.Copy(cube.cp, nextCube.cp, 8);
-                    Array.Copy(cube.co, nextCube.co, 8);
-                    Array.Copy(cube.ep, nextCube.ep, 12);
-                    Array.Copy(cube.eo, nextCube.eo, 12);
-
-                    for (int i = 0; i < power; i++)
-                        nextCube.ApplyMove(move);
-
-                    var moveStr = moveNames[move * 3 + (power - 1)];
-                    path.Add(moveStr);
-
-                    var result = Phase2Search(nextCube, depthLeft - 1, path, move);
-                    if (result != null)
-                        return result;
-
-                    path.RemoveAt(path.Count - 1);
-                }
-            }
-            return null;
-        }
-
-        private static CubieCube ApplyMoves(CubieCube cube, List<string> moves)
-        {
-            CubieCube result = new CubieCube();
-            Array.Copy(cube.cp, result.cp, 8);
-            Array.Copy(cube.co, result.co, 8);
-            Array.Copy(cube.ep, result.ep, 12);
-            Array.Copy(cube.eo, result.eo, 12);
-
-            for (int i = 0; i < moves.Count; i++)
-            {
-                string move = moves[i];
-                int baseIdx = "URFDLB".IndexOf(move[0]);
-                int power = 1;
-                if (move.EndsWith("2")) power = 2;
-                else if (move.EndsWith("'")) power = 3;
-
-                for (int j = 0; j < power; j++)
-                    result.ApplyMove(baseIdx);
-            }
-
-            return result;
+            return result.Trim();
         }
     }
 }

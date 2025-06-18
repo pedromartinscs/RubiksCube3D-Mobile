@@ -1,91 +1,149 @@
-// CubieCube.cs
-// Represents the Rubik's Cube in terms of permutations and orientations
+using System;
+using UnityEngine;
 
 namespace Kociemba
 {
     public class CubieCube
     {
-        public int[] cp = new int[8]; // Corner permutation
-        public int[] co = new int[8]; // Corner orientation (0,1,2)
+        public int[] cp = new int[8];  // Corner permutation
+        public int[] co = new int[8];  // Corner orientation
         public int[] ep = new int[12]; // Edge permutation
-        public int[] eo = new int[12]; // Edge orientation (0,1)
+        public int[] eo = new int[12]; // Edge orientation
 
-        private static readonly int[][] cornerMove = new int[6][]
+        public static CubieCube[] MoveCube = new CubieCube[18];
+
+        public CubieCube() { }
+
+        public CubieCube(CubieCube other)
         {
-            new int[] {3, 0, 1, 2, 4, 5, 6, 7}, // U
-            new int[] {0, 1, 2, 3, 5, 6, 7, 4}, // D
-            new int[] {1, 5, 2, 3, 0, 4, 6, 7}, // L
-            new int[] {0, 1, 3, 7, 4, 5, 2, 6}, // R
-            new int[] {0, 2, 6, 3, 4, 1, 5, 7}, // F
-            new int[] {0, 1, 2, 3, 6, 7, 5, 4}, // B
-        };
+            Array.Copy(other.cp, cp, 8);
+            Array.Copy(other.co, co, 8);
+            Array.Copy(other.ep, ep, 12);
+            Array.Copy(other.eo, eo, 12);
+        }
 
-        private static readonly int[][] edgeMove = new int[6][]
+        public void CopyTo(CubieCube target)
         {
-            new int[] {3, 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11}, // U
-            new int[] {0, 1, 2, 3, 7, 4, 5, 6, 8, 9, 10, 11}, // D
-            new int[] {0, 1, 6, 3, 4, 5, 7, 2, 8, 9, 10, 11}, // L
-            new int[] {0, 1, 2, 11, 4, 5, 6, 3, 8, 9, 10, 7}, // R
-            new int[] {0, 9, 2, 3, 4, 8, 6, 7, 5, 1, 10, 11}, // F
-            new int[] {10, 1, 2, 3, 4, 5, 11, 7, 8, 9, 6, 0}  // B
-        };
+            Array.Copy(this.cp, target.cp, 8);
+            Array.Copy(this.co, target.co, 8);
+            Array.Copy(this.ep, target.ep, 12);
+            Array.Copy(this.eo, target.eo, 12);
+        }
 
-        private static readonly int[][] cornerTwist = new int[6][]
+        public bool IsValid()
         {
-            new int[] {0, 0, 0, 0, 0, 0, 0, 0}, // U
-            new int[] {0, 0, 0, 0, 0, 0, 0, 0}, // D
-            new int[] {1, 2, 0, 0, 2, 1, 0, 0}, // L
-            new int[] {0, 0, 2, 1, 0, 0, 1, 2}, // R
-            new int[] {0, 1, 0, 0, 0, 2, 0, 0}, // F
-            new int[] {2, 0, 0, 0, 1, 0, 0, 0}, // B
-        };
+            int sum = 0;
+            for (int i = 0; i < 8; i++) sum += co[i];
+            if (sum % 3 != 0) return false;
 
-        private static readonly int[][] edgeFlip = new int[6][]
+            sum = 0;
+            for (int i = 0; i < 12; i++) sum += eo[i];
+            if (sum % 2 != 0) return false;
+
+            if ((CornerParity() ^ EdgeParity()) != 0)
+            {
+                Debug.LogError("🧩 Invalid parity between corner and edge permutations.");
+                return false;
+            }
+
+            if (GetTwistIndex() != 0)
+            {
+                Debug.LogError("🌀 Invalid corner twist.");
+                return false;
+            }
+
+            if (GetFlipIndex() != 0)
+            {
+                Debug.LogError("↩️ Invalid edge flip.");
+                return false;
+            }
+
+            return true;
+        }
+
+        public int CornerParity()
         {
-            new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // U
-            new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // D
-            new int[] {0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0}, // L
-            new int[] {0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0}, // R
-            new int[] {0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0}, // F
-            new int[] {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1}  // B
-        };
+            int parity = 0;
+            for (int i = 0; i < 7; i++)
+            {
+                for (int j = i + 1; j < 8; j++)
+                {
+                    if (cp[i] > cp[j])
+                    {
+                        parity ^= 1;
+                    }
+                }
+            }
+            return parity;
+        }
 
-        public CubieCube()
+        public int EdgeParity()
+        {
+            int parity = 0;
+            for (int i = 0; i < 11; i++)
+            {
+                for (int j = i + 1; j < 12; j++)
+                {
+                    if (ep[i] > ep[j])
+                    {
+                        parity ^= 1;
+                    }
+                }
+            }
+            return parity;
+        }
+
+        public static void cornerMultiply(CubieCube a, CubieCube b, CubieCube ab)
         {
             for (int i = 0; i < 8; i++)
             {
-                cp[i] = i;
-                co[i] = 0;
-            }
-            for (int i = 0; i < 12; i++)
-            {
-                ep[i] = i;
-                eo[i] = 0;
+                ab.cp[i] = a.cp[b.cp[i]];
+                int oriA = a.co[b.cp[i]];
+                int oriB = b.co[i];
+                ab.co[i] = (oriA + oriB) % 3;
             }
         }
 
-        public void ApplyMove(int move)
+        public static void edgeMultiply(CubieCube a, CubieCube b, CubieCube ab)
         {
-            int[] newCp = new int[8];
-            int[] newCo = new int[8];
-            int[] newEp = new int[12];
-            int[] newEo = new int[12];
-
-            for (int i = 0; i < 8; i++)
-            {
-                newCp[i] = cp[cornerMove[move][i]];
-                newCo[i] = (co[cornerMove[move][i]] + cornerTwist[move][i]) % 3;
-            }
             for (int i = 0; i < 12; i++)
             {
-                newEp[i] = ep[edgeMove[move][i]];
-                newEo[i] = (eo[edgeMove[move][i]] + edgeFlip[move][i]) % 2;
+                ab.ep[i] = a.ep[b.ep[i]];
+                ab.eo[i] = (a.eo[b.ep[i]] + b.eo[i]) % 2;
             }
+        }
 
-            cp = newCp;
-            co = newCo;
-            ep = newEp;
-            eo = newEo;
+        public int getTwist()
+        {
+            int twist = 0;
+            for (int i = 0; i < 7; i++)
+                twist = 3 * twist + co[i];
+            return twist;
+        }
+
+        public int getFlip()
+        {
+            int flip = 0;
+            for (int i = 0; i < 11; i++)
+                flip = 2 * flip + eo[i];
+            return flip;
+        }
+
+        public int GetTwistIndex() => getTwist();
+
+        public int GetFlipIndex() => getFlip();
+
+        public int GetUDSliceIndex()
+        {
+            int slice = 0;
+            for (int i = 0; i < 12; i++)
+            {
+                if (ep[i] >= 8)
+                {
+                    slice |= 1 << (11 - i);
+                }
+            }
+            return slice;
         }
 
         public bool IsSolved()
@@ -94,21 +152,6 @@ namespace Kociemba
                 if (cp[i] != i || co[i] != 0) return false;
             for (int i = 0; i < 12; i++)
                 if (ep[i] != i || eo[i] != 0) return false;
-            return true;
-        }
-
-        public bool IsInG1()
-        {
-            // All corners must be oriented
-            foreach (int twist in co)
-                if (twist != 0) return false;
-
-            // All edges must be oriented
-            foreach (int flip in eo)
-                if (flip != 0) return false;
-
-            // Middle layer edges (4, 5, 6, 7) must be in UD slice group
-            // For now, we'll skip this enforcement to keep it simple
             return true;
         }
     }
