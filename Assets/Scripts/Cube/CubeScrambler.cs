@@ -5,7 +5,6 @@ using UnityEngine;
 public class CubeScrambler : MonoBehaviour
 {
     public CubeManager cubeManager; // Link to your existing CubeManager
-	public CubeStateExtractor extractor;
     public int scrambleMoves = 20;  // Number of random moves to apply
 
     private bool isScrambling = false;
@@ -36,6 +35,6 @@ public class CubeScrambler : MonoBehaviour
         }
 
         isScrambling = false;
-		Debug.Log("Post-scramble check: " + extractor.GetCubeStateString());
+		Debug.Log("Post-scramble check: " + new string(cubeManager.GetLogicalCube()));
     }
 }

@@ -1,10 +1,13 @@
 using System;
 using UnityEngine;
+using Kociemba;
 
 public static class KociembaSolver
 {
     public static string Solve(string cubeState, int maxDepth = 21, int timeOut = 5, bool useSeparator = false)
     {
+		CubieCube.InitializeMoveCubes();
+		
         try
         {
             if (cubeState.Length != 54)

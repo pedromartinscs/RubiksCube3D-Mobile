@@ -5,7 +5,6 @@ using System;
 
 public class CubeSolver : MonoBehaviour
 {
-    public CubeStateExtractor extractor;
     public CubeManager cubeManager;
 
     public float moveDelay = 0.3f; // Delay between moves
@@ -13,7 +12,7 @@ public class CubeSolver : MonoBehaviour
     // Entry point for Solve button
     public void SolveCube()
     {
-        string state = extractor.GetCubeStateString();
+        string state = new string(cubeManager.GetLogicalCube());
         if (state.Length != 54)
         {
             Debug.LogError("❌ Invalid cube state length: " + state);

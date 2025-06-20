@@ -17,6 +17,8 @@ public class CubeManager : MonoBehaviour
 
     void Start() => CreateCube();
 	
+	public char[] GetLogicalCube() => (char[])logicalCube.Clone();
+	
 	void Awake()
 	{
 		var asset = Resources.Load<TextAsset>("TwistSlicePruneTable");
@@ -78,50 +80,79 @@ public class CubeManager : MonoBehaviour
         }
     }
 	
+	string[] GetEdgePairs(string cubeState)
+	{
+		int[][] edgeIndices = new int[][]
+		{
+			new int[] { 5, 10 },  // UR
+			new int[] { 7, 19 },  // UF
+			new int[] { 3, 37 },  // UL
+			new int[] { 1, 46 },  // UB
+			new int[] { 32, 16 }, // DR
+			new int[] { 28, 25 }, // DF
+			new int[] { 30, 43 }, // DL
+			new int[] { 34, 52 }, // DB
+			new int[] { 23, 12 }, // FR
+			new int[] { 21, 41 }, // FL
+			new int[] { 39, 50 }, // BL
+			new int[] { 14, 48 }  // BR
+		};
+	
+		List<string> results = new();
+		foreach (var pair in edgeIndices)
+		{
+			results.Add($"{cubeState[pair[0]]}{cubeState[pair[1]]}");
+		}
+		return results.ToArray();
+	}
+	
 	private void RotateU(bool cw) => RotateFacelet(new int[] {
-		0, 1, 2, 3, 4, 5, 6, 7, 8,  // U face
+		0, 1, 2, 3, 4, 5, 6, 7, 8,          // U face
 		36, 37, 38,  // L
 		45, 46, 47,  // B
-		9, 10, 11,  // R
+		9, 10, 11,   // R
 		18, 19, 20   // F
 	}, cw);
 
     private void RotateD(bool cw) => RotateFacelet(new int[] {
-		27, 28, 29, 30, 31, 32, 33, 34, 35,
-		24, 25, 26, // F bottom row
-		15, 16, 17, // R bottom row
-		51, 52, 53, // B bottom row
-		42, 43, 44  // L bottom row
+		27, 28, 29, 30, 31, 32, 33, 34, 35, // D face
+		24, 25, 26,  // F
+		15, 16, 17,  // R
+		51, 52, 53,  // B
+		42, 43, 44   // L
 	}, cw);
 
     private void RotateF(bool cw) => RotateFacelet(new int[] {
-		18, 19, 20, 21, 22, 23, 24, 25, 26,
-		44, 41, 38, // L right column
-		29, 28, 27, // D top row
-		9, 12, 15,  // R left column
-		6, 7, 8    // U bottom row
+		18, 19, 20, 21, 22, 23, 24, 25, 26, // F face
+		44, 41, 38,  // L
+		29, 28, 27,  // D
+		9, 12, 15,   // R
+		6, 7, 8      // U
 	}, cw);
 
     private void RotateB(bool cw) => RotateFacelet(new int[] {
-        45, 46, 47, 48, 49, 50, 51, 52, 53,
-        2, 1, 0,    // U top row
-        36, 39, 42,// L left column
-        33, 34, 35,// D bottom row
-        17, 14, 11 // R right column
+        45, 46, 47, 48, 49, 50, 51, 52, 53, // B face
+        2, 1, 0,     // U
+        36, 39, 42,  // L 
+        33, 34, 35,  // D
+        17, 14, 11   // R
     }, cw);
 
     private void RotateL(bool cw) => RotateFacelet(new int[] {
-		36, 37, 38, 39, 40, 41, 42, 43, 44,
-		0, 3, 6,    // U left column (top to bottom)
-		18, 21, 24,// F left column (top to bottom)
-		27, 30, 33,// D left column (top to bottom)
-		53, 50, 47 // B right column (bottom to top)
+		36, 37, 38, 39, 40, 41, 42, 43, 44, // L face
+		0, 3, 6,     // U
+		18, 21, 24,  // F
+		27, 30, 33,  // D
+		53, 50, 47   // B
 	}, cw);
 
     private void RotateR(bool cw) => RotateFacelet(new int[] {
-        9,10,11,12,13,14,15,16,17,
-        2,5,8,38,41,44,29,32,35,36,39,42
-    }, cw);
+		9, 10, 11, 12, 13, 14, 15, 16, 17,  // R face
+		8, 5, 2,    // U
+		45, 48, 51, // B
+		35, 32, 29, // D
+		26, 23, 20  // F
+	}, cw);
 	
 	private void RotateFacelet(int[] indices, bool clockwise)
 	{
@@ -302,7 +333,9 @@ public class CubeManager : MonoBehaviour
 		RotateLogicalCubeFace(faceName, direction);
 		
 		Debug.Log(new string(logicalCube));
-
+		
+		string[] edges = GetEdgePairs(new string(logicalCube));
+		Debug.Log("🧩 Edge pairs: " + string.Join(", ", edges));
         isRotating = false;
 
         if (IsCubeSolved())
